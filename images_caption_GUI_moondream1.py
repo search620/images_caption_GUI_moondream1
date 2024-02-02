@@ -28,6 +28,7 @@ class ImageCaptioningApp(tk.Tk):
         self.image_index = 0
         self.generated_captions = {}
         self.all_images_processed = False
+        self.model_loaded = False 
         self.minsize(800, 700)
       
         # Initiate model loading in a background thread
@@ -38,13 +39,13 @@ class ImageCaptioningApp(tk.Tk):
         model_id = "vikhyatk/moondream1"
         model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(device).half()
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        # Schedule the GUI update to indicate model readiness
+        self.model_loaded = True  # Set the flag to True after loading
         self.after(0, self.update_model_status)
 
     def update_model_status(self):
         # Update the label text to indicate the model is ready
         self.model_status_label.config(text="Model ready!")
-        
+
     def configure_gui(self):
         # Set a dark theme color similar to Photoshop
         self.configure(bg='#323232')  # Photoshop-like dark gray background
@@ -136,7 +137,22 @@ class ImageCaptioningApp(tk.Tk):
             self.images = file_paths
             self.image_index = 0
             self.generated_captions.clear()
-            threading.Thread(target=self.pre_generate_captions, args=(file_paths,), daemon=True).start()
+            # Update the status label immediately after images are selected
+            self.update_status(0, len(self.images))  # Update status with 0 processed out of total selected
+            if self.model_loaded:  # Check if the model is loaded
+                threading.Thread(target=self.pre_generate_captions, args=(file_paths,), daemon=True).start()
+            else:
+                # If the model is not loaded yet, wait for it to load
+                self.after(100, self.wait_for_model)
+
+    def wait_for_model(self):
+        if not self.model_loaded:
+            # Check again after some time
+            self.after(100, self.wait_for_model)
+        else:
+            # Once the model is loaded, start generating captions
+            threading.Thread(target=self.pre_generate_captions, args=(self.images,), daemon=True).start()
+                    
 
 
     def pre_generate_captions(self, image_paths):
